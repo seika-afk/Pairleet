@@ -5,7 +5,7 @@ installing
 by shadcn ui
 
 
-- [ ] Follow the steps from docs
+- [x] Follow the steps from docs
 
 ```
 npx create-next-app@latest ...name --typescript --tailwint --eslint
@@ -14,7 +14,7 @@ or just default
 
 ```
 
-- [ ] install shadcn ui
+- [x] install shadcn ui
 ```
 npx shadcn-ui@latest init
 
@@ -33,7 +33,7 @@ body,
 
 
 
-- [ ]  remove unnecessary stuff
+- [x]  remove unnecessary stuff
 
 
 
@@ -53,6 +53,6 @@ component-> have button component now
 ```
 
 
-- [ ] change font to desired
+- [x] change font to desired
 
  
