@@ -1,0 +1,74 @@
+
+- Leetcode -> problems
+- Discord -> channels + chat
+- Google Docs -> live collaborative editing
+
+
+----- problem ------|-----------------|
+		    |                 |
+--------------------|      CHAT       |
+		    |                 |
+----- code editor --|---------------- |
+
+
+- chat notification like in scriblle 
+`xyz solved 2/3 testcases`
+`zzz submitted successfully`
+
+
+# Collaborative Coding 
+
+1. Live Coding 
+-- others can view the changed code instantly
+
+
+2. Live test case feedbackk 
+- can run questions on editor and run test case and submit 
+
+$ Voice Chat
+$ Git commit to save code
+
+
+
+# ARchiTECTURE
+
+Client 
+- code editor
+- chat
+- problem panel
+
+
+
+$  ____ BREAKING 
+
+- ROOM CREATION + CHAT
+
+- Collaborative Editor
+
+- Problem loader
+
+- COde execution
+
+- Voice chat
+
+- Git func
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
