@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Steps/Auth/setup clerk.md",
+                "file": "learn-todo.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "setup clerk"
+              "title": "learn-todo"
             }
           }
         ]
@@ -187,23 +187,26 @@
   "active": "2f01e79c21dd4aa7",
   "lastOpenFiles": [
     "Steps/dark-light theme.md",
-    "Steps/Auth/setup clerk.md",
     "Steps/Env setup.md",
-    "Steps/Auth/Folders.md",
-    "Steps/Auth/Auth.md",
+    "Steps/DB/ui-profile.md",
+    "Steps/DB/profile->clerk.md",
+    "Steps/DB/db.md",
+    "images/Pasted image 20260322065244.png",
+    "images/Pasted image 20260322062930.png",
+    "images/Pasted image 20260322062536.png",
     "learn-todo.md",
-    "discord_docx/Welcome.md",
+    "Steps/DB",
     "map.md",
     "images/Pasted image 20260318231850.png",
     "images/Pasted image 20260318231241.png",
+    "Steps/Auth/setup clerk.md",
     "images/Pasted image 20260318230804.png",
     "images/Pasted image 20260318230550.png",
     "Pasted image 20260318230700.png",
     "images/Pasted image 20260318230257.png",
     "images/Pasted image 20260318230132.png",
-    "images/Pasted image 20260318230130.png",
-    "images/Pasted image 20260318230113.png",
-    "images/Pasted image 20260318225514.png",
+    "Steps/Auth/Auth.md",
+    "Steps/Auth/Folders.md",
     "images",
     "Steps/Auth",
     "Architecture",

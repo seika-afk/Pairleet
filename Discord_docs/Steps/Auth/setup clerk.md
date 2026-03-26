@@ -18,8 +18,6 @@ Create middleware.ts
 ![[Pasted image 20260318225514.png]]
 inside it -> page.tsx
 
-
-
 and same for sign-in page
 
 - [ ] paste more routes in env

@@ -1,0 +1,3 @@
+[submodule "multi_channel_comm"]
+	path = multi_channel_comm
+	url = https://github.com/seika-afk/Multi-Channel-Communication-Web.git

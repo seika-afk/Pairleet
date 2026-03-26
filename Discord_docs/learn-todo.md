@@ -1,9 +1,8 @@
 - [x] shadcn
-- [ ] Typescript
-- [ ] tailwind
-- [ ] clerk
+- [x] Typescript
+- [x] tailwind
+- [x] clerk
 - [ ]  auth-system
 - [ ] revision of MERN
 - [ ] prisma
 - [ ] planetscale
-
