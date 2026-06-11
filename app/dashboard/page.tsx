@@ -1,6 +1,6 @@
-import { SignOutButton } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import DashboardClient from "./dashboardClient";
 
 export default async function DashboardPage() {
   const { userId } = await auth();
@@ -9,9 +9,5 @@ export default async function DashboardPage() {
     redirect("/sign-in");
   }
 
-  return (
-      <SignOutButton redirectUrl="/sign-in">
-        <button type="button">Log out</button>
-      </SignOutButton>
-  );
+  return <DashboardClient />;
 }
