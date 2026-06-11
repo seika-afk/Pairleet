@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { Server } = require("socket.io");
 
 const io = new Server(3001, {

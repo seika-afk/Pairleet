@@ -1,8 +1,11 @@
 import { Socket } from "socket.io-client";
 import { EVENTS } from "./events";
 
-export const setupSocketListeners = (socket: Socket, onMessage: (msg: any) => void) => {
-  socket.on(EVENTS.RECEIVE_MESSAGE, (msg: any) => {
+export const setupSocketListeners = (
+  socket: Socket,
+  onMessage: (msg: string) => void,
+) => {
+  socket.on(EVENTS.RECEIVE_MESSAGE, (msg: string) => {
     onMessage(msg);
   });
 

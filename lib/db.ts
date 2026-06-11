@@ -6,16 +6,24 @@ if (!uri) {
   throw new Error(" mongo uri not defined");
 }
 
-let cached = (global as any).mongoose;
-if (!cached) {
-  cached = (global as any).mongoose = { conn: null, promise: null };
-}
+type MongooseCache = {
+  conn: typeof mongoose | null;
+  promise: Promise<typeof mongoose> | null;
+};
+
+const globalWithMongoose = globalThis as typeof globalThis & {
+  mongoose?: MongooseCache;
+};
+
+const cached: MongooseCache =
+  globalWithMongoose.mongoose ?? (globalWithMongoose.mongoose = { conn: null, promise: null });
 
 export async function connectDB() {
   if (cached.conn) return cached.conn;
   if (!cached.promise) {
     console.log("Creating new connection");
-    cached.promise = mongoose.connect(uri).then((mongoose) => {
+    const mongoUri = uri!;
+    cached.promise = mongoose.connect(mongoUri).then((mongoose) => {
       console.log("Connected to DB");
       return mongoose;
     });
