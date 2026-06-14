@@ -16,6 +16,7 @@ io.on("connection", (socket) => {
     if (!sessions.has(sessionId)) {
       sessions.set(sessionId, {
         participants: [],
+        questions: [],
       });
     }
     sessions.get(sessionId).participants.push({
@@ -30,6 +31,35 @@ io.on("connection", (socket) => {
   socket.on("send_message", (msg) => {
     console.log(`Message received from ${socket.id}:`, msg);
     io.to(msg.sessionId).emit("receive_message", msg);
+  });
+  socket.on("add_question", ({ sessionId, question }) => {
+    const session = sessions.get(sessionId);
+    if (!session) return;
+    if (!question?.slug) return;
+
+    const alreadyExists = session.questions.some(
+      (q) => q.slug === question.slug,
+    );
+    if (alreadyExists) return;
+
+    session.questions.push({ slug: question.slug });
+    io.to(sessionId).emit("questions_list", session.questions);
+  });
+
+  socket.on("remove_question", ({ sessionId, slug }) => {
+    const session = sessions.get(sessionId);
+    if (!session) return;
+
+    session.questions = session.questions.filter((q) => q.slug !== slug);
+    io.to(sessionId).emit("questions_list", session.questions);
+  });
+  socket.on("get_questions", ({ sessionId }) => {
+    const session = sessions.get(sessionId);
+    if (!session) {
+      socket.emit("questions_list", []);
+      return;
+    }
+    socket.emit("questions_list", session.questions);
   });
 
   socket.on("disconnect", () => {

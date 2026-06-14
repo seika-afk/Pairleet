@@ -12,17 +12,15 @@ export default function DashboardClient() {
   const [username, setUsername] = useState("");
 
   const joinSession = () => {
-    console.log("🔍 socket:", socket);
-    console.log("🔍 sessionId:", sessionId);
-    console.log("🔍 username:", username);
-    console.log("🔍 isConnected:", isConnected);
-
     if (!socket || !sessionId || !username) {
-      console.log("❌ blocked — missing:", { socket: !!socket, sessionId, username });
+      console.log("❌ blocked — missing:", {
+        socket: !!socket,
+        sessionId,
+        username,
+      });
       return;
     }
 
-    console.log("📡 joining session:", sessionId);
     sessionStorage.setItem("username", username);
     socket.emit("join_session", { sessionId, username });
     router.push(`/session/${sessionId}`);
