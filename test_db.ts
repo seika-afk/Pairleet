@@ -4,9 +4,7 @@ import User from "./models/User";
 import SessionArchive from "./models/ServerArchive";
 
 async function main() {
-  await mongoose.connect(
-    "mongodb+srv://artistnoob6_db_user:i9He0mqOL2y1LbGw@leetpair.y8p3lde.mongodb.net/?appName=leetpair",
-  );
+  await mongoose.connect();
 
   console.log("Connected to MongoDB");
 
