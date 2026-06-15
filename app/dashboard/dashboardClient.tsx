@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSocket } from "@/hooks/useSocket";
 import Lobby from "@/components/serverComponent";
@@ -10,7 +10,20 @@ export default function DashboardClient() {
   const { socket, isConnected } = useSocket();
   const [sessionId, setSessionId] = useState("");
   const [username, setUsername] = useState("");
+  const [joinDenied, setJoinDenied] = useState(false);
+  useEffect(() => {
+    if (!socket) return;
 
+    const handleJoinDenied = (msg: string) => {
+      setJoinDenied(true);
+    };
+
+    socket.on("join_denied", handleJoinDenied);
+
+    return () => {
+      socket.off("join_denied", handleJoinDenied);
+    };
+  }, [socket]);
   const joinSession = () => {
     if (!socket || !sessionId || !username) {
       console.log("❌ blocked — missing:", {
@@ -25,7 +38,9 @@ export default function DashboardClient() {
     socket.emit("join_session", { sessionId, username });
     router.push(`/session/${sessionId}`);
   };
-
+  if (joinDenied) {
+    return <div>Session has already started</div>;
+  }
   return (
     <div className="p-4">
       <Lobby

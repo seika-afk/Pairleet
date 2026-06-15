@@ -7,6 +7,10 @@ export function useSocket() {
   const [isConnected, setIsConnected] = useState(socket.connected);
 
   useEffect(() => {
+    if (socket.connected) {
+      setIsConnected(true);
+    }
+
     const onConnect = () => setIsConnected(true);
     const onDisconnect = () => setIsConnected(false);
 
