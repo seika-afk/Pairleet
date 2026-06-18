@@ -58,6 +58,18 @@ export default function Roompage() {
   const [runResult, setRunResult] = useState<RunResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  //if the user submits correctly
+  useEffect(() => {
+    if (runResult?.passed) {
+      console.log("TEST PASSED");
+      //TODO
+      // ->Mark this Question as ANswered by client username
+      // -> Send a notification at chat that user solved qn number
+      // -> update LEADERBOARD
+      //
+    }
+  }, [runResult]);
+
   // Socket: join room + get questions
   useEffect(() => {
     const handleQuestions = (q: SessionQuestion[]) => setQuestions(q);
@@ -168,6 +180,20 @@ export default function Roompage() {
           )}
         </div>
 
+        {/* Chat */}
+        <div className="h-36 border-t border-zinc-800 px-3 py-2 text-xs text-zinc-600">
+          CHAT / LEADERBOARD
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <Editor
+          questions={questions}
+          currentSlug={currentSlug}
+          problem={problem}
+          submitting={submitting}
+          onSubmit={handleSubmit}
+        />
         {runResult && (
           <div className="border-t border-zinc-800 bg-zinc-900 px-3 py-2 max-h-56 overflow-y-auto">
             <div className="flex items-center gap-2 mb-2">
@@ -241,21 +267,6 @@ export default function Roompage() {
             </div>
           </div>
         )}
-
-        {/* Chat */}
-        <div className="h-36 border-t border-zinc-800 px-3 py-2 text-xs text-zinc-600">
-          CHAT / LEADERBOARD
-        </div>
-      </div>
-
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Editor
-          questions={questions}
-          currentSlug={currentSlug}
-          problem={problem}
-          submitting={submitting}
-          onSubmit={handleSubmit}
-        />
       </div>
     </div>
   );

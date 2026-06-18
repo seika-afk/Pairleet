@@ -4,11 +4,11 @@ const lc = new LeetCode();
 
 const COMPILER_MAP: Record<string, string> = {
   python: "python-3.14",
-  javascript: "nodejs-22",
-  cpp: "g++23",
-  c: "gcc13",
-  go: "go-1.23",
-  rust: "rust-1.84",
+  javascript: "typescript-deno", 
+  cpp: "g++-15",
+  c: "gcc-15",
+  go: "go-1.26",
+  rust: "rust-1.93",
 };
 
 const normalize = (s: string) =>
@@ -31,17 +31,83 @@ function buildPythonScript(userCode: string, inputLines: string[]): string {
   return `import ast, json\n\n${userCode}\n\n_args = [ast.literal_eval(x) for x in ${JSON.stringify(inputLines)}]\n_result = Solution().${sig.method}(*_args)\nprint(json.dumps(_result))\n`;
 }
 
+function parseJSSignature(code: string): { method: string } | null {
+  let match = code.match(/var\s+(\w+)\s*=\s*function/);
+  if (match) return { method: match[1] };
+  match = code.match(/function\s+(\w+)\s*\(/);
+  if (match) return { method: match[1] };
+  match = code.match(/(?:const|let)\s+(\w+)\s*=\s*(?:function|\()/);
+  if (match) return { method: match[1] };
+  return null;
+}
+
 function buildJSScript(userCode: string, inputLines: string[]): string {
+  const sig = parseJSSignature(userCode);
   const argList = inputLines
     .map((l) => `JSON.parse(${JSON.stringify(l.trim())})`)
     .join(", ");
+
+  if (sig) {
+    return `${userCode}\n\nconst _result = ${sig.method}(${argList});\nconsole.log(JSON.stringify(_result));\n`;
+  }
+
   return `${userCode}\n\nconst _sol = new Solution();\nconst _method = Object.getOwnPropertyNames(Solution.prototype).find(m => m !== 'constructor');\nconst _result = _sol[_method](${argList});\nconsole.log(JSON.stringify(_result));\n`;
+}
+
+function parseCSignature(
+  code: string,
+): { method: string; params: { type: string; name: string }[] } | null {
+  const match = code.match(/\w[\w\* ]*\s+(\w+)\s*\(([^)]*)\)\s*\{/);
+  if (!match) return null;
+  const method = match[1];
+  const paramStr = match[2];
+  const params = paramStr
+    .split(",")
+    .map((p) => {
+      p = p.trim();
+      const parts = p.split(/\s+/);
+      const name = parts[parts.length - 1].replace(/\*/, "");
+      const type = parts.slice(0, -1).join(" ").trim();
+      return { type, name };
+    })
+    .filter((p) => p.name && p.type);
+  return { method, params };
+}
+
+function buildCScript(userCode: string, inputLines: string[]): string {
+  const sig = parseCSignature(userCode);
+  if (!sig) return userCode;
+
+  // C LeetCode signatures often include extra params like numsSize/returnSize
+  // that aren't part of the actual input — handle the common simple case:
+  // single scalar param (int x) -> direct call
+  const realParams = sig.params.filter((p) => !/size|len|count/i.test(p.name));
+
+  const argList = realParams
+    .map((p, i) => {
+      const line = (inputLines[i] ?? "").trim();
+      if (p.type.includes("*")) return line; // arrays not fully supported in simple mode
+      return line;
+    })
+    .join(", ");
+
+  return `#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+${userCode}
+
+int main() {
+    int result = ${sig.method}(${argList});
+    printf("%d\\n", result);
+    return 0;
+}
+`;
 }
 
 function parseCppSignature(
   code: string,
 ): { method: string; params: { type: string; name: string }[] } | null {
-  // e.g. vector<int> twoSum(vector<int>& nums, int target)
   const match = code.match(/\w[\w<>, *]*\s+(\w+)\s*\(([^)]*)\)\s*\{/);
   if (!match) return null;
   const method = match[1];
@@ -63,7 +129,6 @@ function parseCppSignature(
 function cppArgFromLine(type: string, line: string): string {
   const t = type.toLowerCase();
   if (t.includes("vector") && t.includes("vector")) {
-    // vector<vector<int>>
     return `parseVecVec(${JSON.stringify(line)})`;
   } else if (t.includes("vector")) {
     return `parseVec(${JSON.stringify(line)})`;
@@ -84,6 +149,17 @@ function buildCppScript(userCode: string, inputLines: string[]): string {
 
   return `#include <bits/stdc++.h>
 using namespace std;
+
+template<typename T>
+ostream& operator<<(ostream& os, const vector<T>& v) {
+    os << "[";
+    for (size_t i = 0; i < v.size(); i++) {
+        if (i) os << ",";
+        os << v[i];
+    }
+    os << "]";
+    return os;
+}
 
 ${userCode}
 
@@ -112,17 +188,7 @@ vector<vector<int>> parseVecVec(const string& s) {
 int main() {
     Solution sol;
     auto result = sol.${sig.method}(${argList});
-    // print result
-    if constexpr (requires { result.begin(); }) {
-        cout << "[";
-        for(int i=0;i<(int)result.size();i++){
-            if(i) cout<<",";
-            cout<<result[i];
-        }
-        cout << "]" << endl;
-    } else {
-        cout << result << endl;
-    }
+    cout << result << endl;
     return 0;
 }
 `;
@@ -179,19 +245,36 @@ func parseIntSlice(s string) []int {
     return result
 }
 
+func formatResult(v interface{}) string {
+    switch val := v.(type) {
+    case []int:
+        parts := make([]string, len(val))
+        for i, n := range val {
+            parts[i] = strconv.Itoa(n)
+        }
+        return "[" + strings.Join(parts, ",") + "]"
+    default:
+        return fmt.Sprintf("%v", val)
+    }
+}
+
 func main() {
     result := ${sig.method}(${argList})
-    fmt.Println(result)
+    fmt.Println(formatResult(result))
 }
 `;
 }
 
 function buildRustScript(userCode: string, inputLines: string[]): string {
-  const match = userCode.match(/pub fn\s+(\w+)\s*\(([^)]*)\)/);
-  if (!match) return userCode;
+  // LeetCode Rust is: impl Solution { pub fn method(&self, ...) -> T { ... } }
+  const match = userCode.match(/pub fn\s+(\w+)\s*\(\s*&self\s*,?([^)]*)\)/);
+  const isStaticFn = !match && userCode.match(/pub fn\s+(\w+)\s*\(([^)]*)\)/);
 
-  const method = match[1];
-  const params = match[2]
+  if (!match && !isStaticFn) return userCode;
+
+  const method = match ? match[1] : isStaticFn![1];
+  const paramStr = match ? match[2] : isStaticFn![2];
+  const params = paramStr
     .split(",")
     .map((p) => p.trim())
     .filter(Boolean);
@@ -214,10 +297,18 @@ function buildRustScript(userCode: string, inputLines: string[]): string {
     })
     .join(", ");
 
-  return `${userCode}
+  const callExpr = match
+    ? `Solution{}.${method}(${argList})` // instance method needs &self -> Solution{}.method(...)
+    : `Solution::${method}(${argList})`; // static fn
+
+  // LeetCode Rust starter never declares `struct Solution;` itself — add it
+  const needsStruct = !/struct\s+Solution\b/.test(userCode);
+  const structDecl = needsStruct ? "struct Solution;\n\n" : "";
+
+  return `${structDecl}${userCode}
 
 fn main() {
-    let result = Solution::${method}(${argList});
+    let result = ${callExpr};
     println!("{:?}", result);
 }
 `;
@@ -294,6 +385,9 @@ export async function POST(req: Request) {
       case "javascript":
         runnableCode = buildJSScript(code, inputLines);
         break;
+      case "c":
+        runnableCode = buildCScript(code, inputLines);
+        break;
       case "cpp":
         runnableCode = buildCppScript(code, inputLines);
         break;
@@ -307,7 +401,14 @@ export async function POST(req: Request) {
         runnableCode = code;
     }
 
+    console.log(
+      `=== Case ${i + 1} (${language}) SCRIPT ===\n${runnableCode}\n=== END SCRIPT ===`,
+    );
+
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s safety timeout
+
       const response = await fetch(
         "https://api.onlinecompiler.io/api/run-code-sync/",
         {
@@ -317,15 +418,23 @@ export async function POST(req: Request) {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({ compiler, code: runnableCode }),
+          signal: controller.signal,
         },
       );
+
+      clearTimeout(timeoutId);
 
       const data = await response.json();
       console.log(`Case ${i + 1} response:`, JSON.stringify(data));
       actual = (data.output ?? data.stdout ?? data.result ?? "").trim();
       if (data.error) error = data.error;
     } catch (e) {
-      error = String(e);
+      if (e instanceof Error && e.name === "AbortError") {
+        error = "Execution timed out after 25s";
+      } else {
+        error = String(e);
+      }
+      console.log(`Case ${i + 1} fetch error:`, error);
     }
 
     results.push({
