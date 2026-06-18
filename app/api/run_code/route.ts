@@ -4,7 +4,7 @@ const lc = new LeetCode();
 
 const COMPILER_MAP: Record<string, string> = {
   python: "python-3.14",
-  javascript: "typescript-deno", 
+  javascript: "typescript-deno", // no plain Node.js compiler listed; Deno runs JS fine
   cpp: "g++-15",
   c: "gcc-15",
   go: "go-1.26",
@@ -19,23 +19,132 @@ const normalize = (s: string) =>
     .replace(/[^\x20-\x7E]/g, "")
     .toLowerCase();
 
+// ── Python ──────────────────────────────────────────────────────────────────
 function parsePythonSignature(code: string): { method: string } | null {
-  const match = code.match(/def\s+(\w+)\s*\(self([^)]*)\)/);
-  if (!match) return null;
-  return { method: match[1] };
+  // Isolate the Solution class block only (from "class Solution" to next top-level "class" or EOF)
+  const classMatch = code.match(/class\s+Solution\b[\s\S]*?(?=\nclass\s|\Z)/);
+  const scope = classMatch ? classMatch[0] : code;
+
+  // Find all method defs inside, skip dunder methods like __init__
+  const methodMatches = [...scope.matchAll(/def\s+(\w+)\s*\(self([^)]*)\)/g)];
+  const realMethod = methodMatches.find((m) => !m[1].startsWith("__"));
+  if (!realMethod) return null;
+  return { method: realMethod[1] };
 }
 
 function buildPythonScript(userCode: string, inputLines: string[]): string {
   const sig = parsePythonSignature(userCode);
   if (!sig) return userCode;
-  return `import ast, json\n\n${userCode}\n\n_args = [ast.literal_eval(x) for x in ${JSON.stringify(inputLines)}]\n_result = Solution().${sig.method}(*_args)\nprint(json.dumps(_result))\n`;
+
+  const usesListNode = /ListNode/.test(userCode);
+  const usesTreeNode = /TreeNode/.test(userCode);
+  const usesOptional = /Optional/.test(userCode);
+  const usesList = /\bList\[/.test(userCode);
+
+  const helpers: string[] = [];
+
+  if (usesListNode) {
+    helpers.push(`
+class ListNode:
+    def __init__(self, val=0, next=None):
+        self.val = val
+        self.next = next
+
+def _to_linked_list(arr):
+    if not arr: return None
+    head = ListNode(arr[0])
+    cur = head
+    for v in arr[1:]:
+        cur.next = ListNode(v)
+        cur = cur.next
+    return head
+
+def _from_linked_list(node):
+    out = []
+    while node:
+        out.append(node.val)
+        node = node.next
+    return out
+`);
+  }
+
+  if (usesTreeNode) {
+    helpers.push(`
+class TreeNode:
+    def __init__(self, val=0, left=None, right=None):
+        self.val = val
+        self.left = left
+        self.right = right
+
+def _to_tree(arr):
+    if not arr: return None
+    nodes = [TreeNode(v) if v is not None else None for v in arr]
+    kids = nodes[::-1]
+    root = kids.pop()
+    for node in nodes:
+        if node:
+            if kids: node.left = kids.pop()
+            if kids: node.right = kids.pop()
+    return root
+
+def _from_tree(root):
+    if not root: return []
+    out, queue = [], [root]
+    while queue:
+        node = queue.pop(0)
+        if node:
+            out.append(node.val)
+            queue.append(node.left)
+            queue.append(node.right)
+        else:
+            out.append(None)
+    while out and out[-1] is None:
+        out.pop()
+    return out
+`);
+  }
+
+  const importLine = `import ast, json${usesOptional || usesList ? ", typing" : ""}\n${usesOptional ? "from typing import Optional, List\n" : usesList ? "from typing import List\n" : ""}`;
+
+  // Build arg conversion: wrap list args in _to_linked_list/_to_tree if the param type suggests it
+  // Simple heuristic: first param is the data structure if ListNode/TreeNode is used
+  const argsRaw = `_raw_args = [ast.literal_eval(x) for x in ${JSON.stringify(inputLines)}]`;
+
+  let argConversion = "_args = _raw_args";
+  if (usesListNode) {
+    argConversion = `_args = [_to_linked_list(_raw_args[0])] + _raw_args[1:]`;
+  } else if (usesTreeNode) {
+    argConversion = `_args = [_to_tree(_raw_args[0])] + _raw_args[1:]`;
+  }
+
+  let outputConversion = "json.dumps(_result)";
+  if (usesListNode) {
+    outputConversion = `json.dumps(_from_linked_list(_result)) if not isinstance(_result, (list, int, str, bool, float, type(None))) else json.dumps(_result)`;
+  } else if (usesTreeNode) {
+    outputConversion = `json.dumps(_from_tree(_result)) if not isinstance(_result, (list, int, str, bool, float, type(None))) else json.dumps(_result)`;
+  }
+
+  return `${importLine}${helpers.join("\n")}
+${userCode}
+
+${argsRaw}
+${argConversion}
+_result = Solution().${sig.method}(*_args)
+print(${outputConversion})
+`;
 }
 
+// ── JavaScript ───────────────────────────────────────────────────────────────
+// LeetCode JS starter code is a plain function, NOT a class:
+//   var reverse = function(x) { ... };
 function parseJSSignature(code: string): { method: string } | null {
+  // var name = function(...)
   let match = code.match(/var\s+(\w+)\s*=\s*function/);
   if (match) return { method: match[1] };
+  // function name(...)
   match = code.match(/function\s+(\w+)\s*\(/);
   if (match) return { method: match[1] };
+  // const/let name = (...) =>  (arrow function)
   match = code.match(/(?:const|let)\s+(\w+)\s*=\s*(?:function|\()/);
   if (match) return { method: match[1] };
   return null;
@@ -51,9 +160,14 @@ function buildJSScript(userCode: string, inputLines: string[]): string {
     return `${userCode}\n\nconst _result = ${sig.method}(${argList});\nconsole.log(JSON.stringify(_result));\n`;
   }
 
+  // Fallback: maybe it IS a class-based Solution (rare but possible)
   return `${userCode}\n\nconst _sol = new Solution();\nconst _method = Object.getOwnPropertyNames(Solution.prototype).find(m => m !== 'constructor');\nconst _result = _sol[_method](${argList});\nconsole.log(JSON.stringify(_result));\n`;
 }
 
+// ── C ────────────────────────────────────────────────────────────────────────
+// LeetCode C starter code is a plain function (no class), e.g.:
+//   int reverse(int x) { ... }
+//   int* twoSum(int* nums, int numsSize, int target, int* returnSize) { ... }
 function parseCSignature(
   code: string,
 ): { method: string; params: { type: string; name: string }[] } | null {
@@ -105,9 +219,12 @@ int main() {
 `;
 }
 
+// ── C++ ──────────────────────────────────────────────────────────────────────
+// Parses method name + param types from the class definition
 function parseCppSignature(
   code: string,
 ): { method: string; params: { type: string; name: string }[] } | null {
+  // e.g. vector<int> twoSum(vector<int>& nums, int target)
   const match = code.match(/\w[\w<>, *]*\s+(\w+)\s*\(([^)]*)\)\s*\{/);
   if (!match) return null;
   const method = match[1];
@@ -129,6 +246,7 @@ function parseCppSignature(
 function cppArgFromLine(type: string, line: string): string {
   const t = type.toLowerCase();
   if (t.includes("vector") && t.includes("vector")) {
+    // vector<vector<int>>
     return `parseVecVec(${JSON.stringify(line)})`;
   } else if (t.includes("vector")) {
     return `parseVec(${JSON.stringify(line)})`;
@@ -194,6 +312,7 @@ int main() {
 `;
 }
 
+// ── Go ───────────────────────────────────────────────────────────────────────
 function parseGoSignature(
   code: string,
 ): { method: string; params: string[] } | null {
@@ -265,6 +384,7 @@ func main() {
 `;
 }
 
+// ── Rust ─────────────────────────────────────────────────────────────────────
 function buildRustScript(userCode: string, inputLines: string[]): string {
   // LeetCode Rust is: impl Solution { pub fn method(&self, ...) -> T { ... } }
   const match = userCode.match(/pub fn\s+(\w+)\s*\(\s*&self\s*,?([^)]*)\)/);
@@ -314,6 +434,7 @@ fn main() {
 `;
 }
 
+// ── Main handler ─────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
   const { code, language, slug } = await req.json();
 
