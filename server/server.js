@@ -16,7 +16,7 @@ io.on("connection", (socket) => {
 
     if (session?.started) {
       console.log("REJECTED USER", username);
-      socket.emit("join_denied", "Session already started");
+      //     socket.emit("join_denied", "Session already started");
       return;
     }
     socket.join(sessionId);
@@ -30,7 +30,9 @@ io.on("connection", (socket) => {
     }
     console.log("ADDED USER", username);
     const sessionObj = sessions.get(sessionId);
-    const existingParticipant = sessionObj.participants.find(p => p.username === username);
+    const existingParticipant = sessionObj.participants.find(
+      (p) => p.username === username,
+    );
     if (existingParticipant) {
       existingParticipant.socketId = socket.id;
     } else {
@@ -77,6 +79,7 @@ io.on("connection", (socket) => {
     if (alreadyExists) return;
 
     session.questions.push({ slug: question.slug });
+    console.log(session.questions);
     io.to(sessionId).emit("questions_list", session.questions);
   });
 
@@ -94,6 +97,13 @@ io.on("connection", (socket) => {
       return;
     }
     socket.emit("questions_list", session.questions);
+  });
+
+  socket.on("join_room", ({ sessionId }) => {
+    socket.join(sessionId);
+    const session = sessions.get(sessionId);
+    console.log("join_room called, sessionId:", sessionId, "session:", session);
+    socket.emit("questions_list", session?.questions ?? []);
   });
 
   socket.on("disconnect", () => {
