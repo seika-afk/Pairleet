@@ -26,6 +26,7 @@ io.on("connection", (socket) => {
         questions: [],
         owner: username,
         started: false,
+        questions_solved: {},
       });
     }
     console.log("ADDED USER", username);
@@ -46,6 +47,19 @@ io.on("connection", (socket) => {
     socket.to(sessionId).emit("participant_joined", username);
   });
 
+  socket.on("question_solved", ({ sessionId, qIndex, username }) => {
+    const session = sessions.get(sessionId);
+
+    if (!session) return;
+
+    if (!session.questions_solved[username]) {
+      session.questions_solved[username] = new Set();
+    }
+
+    session.questions_solved[username].add(qIndex);
+    console.log("QUESTION SOLVED");
+    console.log(session.questions_solved);
+  });
   socket.on("session_started", (sessionId) => {
     console.log("SESSION STARTED", sessionId);
     const session = sessions.get(sessionId);

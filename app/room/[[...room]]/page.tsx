@@ -55,8 +55,16 @@ export default function Roompage() {
   const [qIndex, setQIndex] = useState(0);
   const [problem, setProblem] = useState<ProblemData | null>(null);
   const [loadingQ, setLoadingQ] = useState(false);
+
   const [runResult, setRunResult] = useState<RunResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const [username, setUsername] = useState("");
+  const [solvedQn, setSolvedQn] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    const stored = sessionStorage.getItem("username");
+    if (stored) setUsername(stored);
+  }, []);
 
   //if the user submits correctly
   useEffect(() => {
@@ -64,7 +72,14 @@ export default function Roompage() {
       console.log("TEST PASSED");
       //TODO
       // ->Mark this Question as ANswered by client username
-      // -> Send a notification at chat that user solved qn number
+      socket.emit("question_solved", { sessionId, qIndex, username });
+      setSolvedQn((prev) => {
+        const next = new Set(prev);
+        next.add(qIndex);
+        return next;
+      });
+
+      // -> Send a notification at chat that user solved qn number---------------- TODO
       // -> update LEADERBOARD
       //
     }
@@ -171,6 +186,7 @@ export default function Roompage() {
           {!loadingQ && problem && (
             <>
               <h2 className="font-semibold mb-3">{problem.title}</h2>
+              <h2 className="text-3xl">{solvedQn.has(qIndex) && "SOLVED"}</h2>
               <div
                 className="text-xs  prose prose-invert max-w-none
                   [&_pre]:bg-zinc-800 [&_pre]:rounded [&_pre]:p-2 [&_code]:text-green-300"
