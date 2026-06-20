@@ -16,7 +16,7 @@ const SessionArchiveSchema = new Schema(
     },
     participants: [
       {
-        userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+        userId: { type: String, required: false },
         username: {
           type: String,
           required: true,
@@ -42,6 +42,10 @@ const SessionArchiveSchema = new Schema(
     totalQuestions: {
       type: Number,
       required: true,
+    },
+    winnerUsername: {
+      type: String,
+      required: false,
     },
     questions: [
       {
