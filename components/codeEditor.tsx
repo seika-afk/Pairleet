@@ -7,6 +7,8 @@ import { cpp } from "@codemirror/lang-cpp";
 import { rust } from "@codemirror/lang-rust";
 import { go } from "@codemirror/lang-go";
 import { oneDark } from "@codemirror/theme-one-dark";
+import { useSocket } from "@/hooks/useSocket";
+import { useParams } from "next/navigation";
 
 interface SessionQuestion {
   slug: string;
@@ -49,6 +51,7 @@ type EditorProps = {
   problem: ProblemData | null;
   submitting: boolean;
   onSubmit: (code: string, language: string) => void;
+  endSession: () => void;
 };
 
 export default function Editor({
@@ -56,6 +59,7 @@ export default function Editor({
   problem,
   submitting,
   onSubmit,
+  endSession,
 }: EditorProps) {
   const [code, setCode] = useState("");
   const [language, setLanguage] = useState("python");
@@ -78,6 +82,30 @@ export default function Editor({
     const snippet = problem.codeSnippets?.find((s) => s.langSlug === slugKey);
     if (snippet) setCode(snippet.code);
   };
+
+  const [user, setUser] = useState("");
+  const [isOwner, setIsOwner] = useState(false);
+
+  const { socket, isConnected } = useSocket();
+  const params = useParams();
+  const sessionId = params.id as string;
+
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    const stored = sessionStorage.getItem("username") ?? "";
+    setUser(stored);
+
+    const handleOwner = (username: string) => {
+      setIsOwner(username === stored);
+    };
+    socket.on("owner_name", handleOwner);
+    socket.emit("get_owner", { sessionId });
+
+    return () => {
+      socket.off("owner_name", handleOwner);
+    };
+  }, [socket, isConnected, sessionId]);
 
   return (
     <div className="flex flex-col h-full">
@@ -102,6 +130,14 @@ export default function Editor({
           <option value="dark">Dark</option>
           <option value="light">Light</option>
         </select>
+        {isOwner && (
+          <button
+            className="  bg-gray-400  hover:bg-gray-200"
+            onClick={endSession}
+          >
+            End Session
+          </button>
+        )}
         <button
           onClick={() => onSubmit(code, language)}
           disabled={submitting || !currentSlug}
