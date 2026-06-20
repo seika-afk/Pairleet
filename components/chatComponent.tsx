@@ -49,7 +49,7 @@ export default function ChatComponent({ socket, sessionId, username }: Props) {
         style={{ height: 200, overflowY: "auto", border: "1px solid black" }}
       >
         {messages.map((m, i) => (
-          <div key={i}>
+          <div key={i} className={ m.username=="server"?"text-red-500":""}>
             <b>{m.username}:</b> {m.content}
           </div>
         ))}

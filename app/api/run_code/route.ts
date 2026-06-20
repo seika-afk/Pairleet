@@ -110,18 +110,31 @@ def _from_tree(root):
   // Simple heuristic: first param is the data structure if ListNode/TreeNode is used
   const argsRaw = `_raw_args = [ast.literal_eval(x) for x in ${JSON.stringify(inputLines)}]`;
 
+  // IMPORTANT: don't assume only the FIRST argument is the linked
+  // list/tree. Problems like "Add Two Numbers" or "Merge Two Sorted
+  // Lists" take TWO ListNode params; problems like "Remove Nth Node
+  // From End of List" take a ListNode plus a trailing scalar (k).
+  // Converting only _raw_args[0] silently leaves later list-shaped
+  // args as plain Python lists (no .val/.next), breaking the solution
+  // or producing a result that fails comparison. Instead, convert every
+  // arg that is itself a list (the data-structure params) and leave
+  // scalar args (ints like k/target/n) untouched.
   let argConversion = "_args = _raw_args";
   if (usesListNode) {
-    argConversion = `_args = [_to_linked_list(_raw_args[0])] + _raw_args[1:]`;
+    argConversion = `_args = [_to_linked_list(a) if isinstance(a, list) else a for a in _raw_args]`;
   } else if (usesTreeNode) {
-    argConversion = `_args = [_to_tree(_raw_args[0])] + _raw_args[1:]`;
+    argConversion = `_args = [_to_tree(a) if isinstance(a, list) else a for a in _raw_args]`;
   }
 
   let outputConversion = "json.dumps(_result)";
   if (usesListNode) {
-    outputConversion = `json.dumps(_from_linked_list(_result)) if not isinstance(_result, (list, int, str, bool, float, type(None))) else json.dumps(_result)`;
+    // _result is Optional[ListNode] — None is a *valid* empty-list head,
+    // not a signal to skip conversion. _from_linked_list already returns
+    // [] for None safely, so always convert rather than special-casing None
+    // as if it were a plain already-JSON-able value.
+    outputConversion = "json.dumps(_from_linked_list(_result))";
   } else if (usesTreeNode) {
-    outputConversion = `json.dumps(_from_tree(_result)) if not isinstance(_result, (list, int, str, bool, float, type(None))) else json.dumps(_result)`;
+    outputConversion = "json.dumps(_from_tree(_result))";
   }
 
   return `${importLine}${helpers.join("\n")}
@@ -137,16 +150,38 @@ print(${outputConversion})
 // ── JavaScript ───────────────────────────────────────────────────────────────
 // LeetCode JS starter code is a plain function, NOT a class:
 //   var reverse = function(x) { ... };
-function parseJSSignature(code: string): { method: string } | null {
+function parseJSSignature(
+  code: string,
+): { method: string; isClassMethod: boolean } | null {
+  // Class-based Solution (e.g. permute, backtracking-style problems) —
+  // check this FIRST. Otherwise the plain-function regexes below can match
+  // an inner helper (e.g. `const backtrack = (path) => {...}` declared
+  // inside a method body) instead of the real entry point, and the
+  // generated script calls a function that's out of scope -> runtime error.
+  if (/class\s+Solution\b/.test(code)) {
+    const classBodyMatch = code.match(
+      /class\s+Solution\b[^{]*\{([\s\S]*)\}\s*$/,
+    );
+    const body = classBodyMatch ? classBodyMatch[1] : code;
+    // Only match method definitions that start at the beginning of a line
+    // (i.e. declared directly in the class body), not nested
+    // const/let/function declarations inside another method's body.
+    const methodMatches = [
+      ...body.matchAll(/^[ \t]*(\w+)\s*\(([^)]*)\)\s*\{/gm),
+    ];
+    const real = methodMatches.find((m) => m[1] !== "constructor");
+    if (real) return { method: real[1], isClassMethod: true };
+  }
+
   // var name = function(...)
   let match = code.match(/var\s+(\w+)\s*=\s*function/);
-  if (match) return { method: match[1] };
+  if (match) return { method: match[1], isClassMethod: false };
   // function name(...)
   match = code.match(/function\s+(\w+)\s*\(/);
-  if (match) return { method: match[1] };
+  if (match) return { method: match[1], isClassMethod: false };
   // const/let name = (...) =>  (arrow function)
   match = code.match(/(?:const|let)\s+(\w+)\s*=\s*(?:function|\()/);
-  if (match) return { method: match[1] };
+  if (match) return { method: match[1], isClassMethod: false };
   return null;
 }
 
@@ -156,11 +191,17 @@ function buildJSScript(userCode: string, inputLines: string[]): string {
     .map((l) => `JSON.parse(${JSON.stringify(l.trim())})`)
     .join(", ");
 
+  if (sig?.isClassMethod) {
+    return `${userCode}\n\nconst _result = new Solution().${sig.method}(${argList});\nconsole.log(JSON.stringify(_result));\n`;
+  }
+
   if (sig) {
     return `${userCode}\n\nconst _result = ${sig.method}(${argList});\nconsole.log(JSON.stringify(_result));\n`;
   }
 
-  // Fallback: maybe it IS a class-based Solution (rare but possible)
+  // Fallback: class-based Solution where the method couldn't be isolated
+  // any other way (e.g. unusual formatting) — grab the first non-constructor
+  // method off the prototype at runtime instead.
   return `${userCode}\n\nconst _sol = new Solution();\nconst _method = Object.getOwnPropertyNames(Solution.prototype).find(m => m !== 'constructor');\nconst _result = _sol[_method](${argList});\nconsole.log(JSON.stringify(_result));\n`;
 }
 
@@ -412,7 +453,10 @@ function buildRustScript(userCode: string, inputLines: string[]): string {
         return `vec![${nums}]`;
       }
       if (p.includes("i32") || p.includes("i64")) return line;
-      if (p.includes("String")) return `String::from(${JSON.stringify(line)})`;
+      if (p.includes("String")) {
+        const unquoted = line.replace(/^"|"$/g, "");
+        return `String::from(${JSON.stringify(unquoted)})`;
+      }
       return line;
     })
     .join(", ");
@@ -432,6 +476,52 @@ fn main() {
     println!("{:?}", result);
 }
 `;
+}
+
+// ── Matching raw test cases to the right description example ───────────────
+// `problem.exampleTestcases` (used to build `casesLines`, the actual runtime
+// inputs) and the `Example N: ... Output: ...` blocks in `problem.content`
+// (used to build `expectedOutputs`) are two INDEPENDENT fields returned by
+// LeetCode. They are not guaranteed to list cases in the same order as each
+// other — exampleTestcases is just a flat blob of inputs for the "Run Code"
+// button, while the description's Example blocks can be ordered differently.
+//
+// Previously we zipped casesLines[i] with expectedOutputs[i] purely by
+// array index, which silently pairs the wrong input with the wrong expected
+// output whenever the two orderings diverge (e.g. Count and Say: raw cases
+// are [1, 4] but the description's Output: values end up associated with
+// the opposite case).
+//
+// Fix: extract each Example's Input together with its Output (so within a
+// single example they're reliably paired with each other), then match each
+// raw input case to the description example whose *input values* actually
+// match it. Only fall back to positional pairing if no value-match exists.
+
+// Splits "nums = [2,7,11,15], target = 9" into ["[2,7,11,15]", "9"],
+// respecting bracket/paren depth so commas inside arrays aren't split on.
+function extractValueTokens(input: string): string[] {
+  const tokens: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of input) {
+    if (ch === "[" || ch === "(") depth++;
+    if (ch === "]" || ch === ")") depth--;
+    if (ch === "," && depth === 0) {
+      tokens.push(cur.trim());
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur.trim()) tokens.push(cur.trim());
+  return tokens.map((t) => {
+    const eq = t.indexOf("=");
+    return (eq >= 0 ? t.slice(eq + 1) : t).trim();
+  });
+}
+
+function comparableInputKey(tokens: string[]): string {
+  return normalize(tokens.join(","));
 }
 
 // ── Main handler ─────────────────────────────────────────────────────────────
@@ -454,37 +544,128 @@ export async function POST(req: Request) {
 
   const raw = problem.exampleTestcases ?? "";
 
-  const outputMatches = [
-    ...(problem.content?.matchAll(/Output[^:]*:\s*<\/strong>\s*([^\n<]+)/gi) ??
-      []),
-  ];
-  const expectedOutputs = outputMatches.map((m) =>
-    m[1]
-      .trim()
+  function decodeHtmlEntities(s: string): string {
+    return s
       .replace(/&quot;/g, '"')
       .replace(/&lt;/g, "<")
       .replace(/&gt;/g, ">")
+      .replace(/&nbsp;/g, " ")
       .replace(/&amp;/g, "&")
       .replace(/\r/g, "")
-      .trim(),
+      .trim();
+  }
+
+  function stripExampleLabel(line: string): string {
+    return line.replace(/^(input|output)\s*:\s*/i, "").trim();
+  }
+
+  function splitExampleCases(rawCases: string, caseCount: number): string[][] {
+    const cleaned = decodeHtmlEntities(rawCases).replace(/\r/g, "").trim();
+    if (!cleaned) return [];
+
+    const blankLineBlocks = cleaned
+      .split(/\n\s*\n+/)
+      .map((block) =>
+        block
+          .split("\n")
+          .map((line) => stripExampleLabel(line))
+          .filter(Boolean),
+      )
+      .filter((block) => block.length > 0);
+
+    if (blankLineBlocks.length > 1) {
+      if (caseCount <= 0 || blankLineBlocks.length === caseCount) {
+        return blankLineBlocks;
+      }
+    }
+
+    const lines = cleaned
+      .split("\n")
+      .map((line) => stripExampleLabel(line))
+      .filter(Boolean);
+    if (lines.length === 0) return [];
+    if (caseCount > 0 && lines.length === caseCount) {
+      return lines.map((line) => [line]);
+    }
+    if (caseCount <= 1 || lines.length <= 1) {
+      return [lines];
+    }
+
+    const chunkSize = Math.ceil(lines.length / caseCount);
+    const cases: string[][] = [];
+    for (let i = 0; i < lines.length; i += chunkSize) {
+      cases.push(lines.slice(i, i + chunkSize));
+    }
+    return cases;
+  }
+
+  // Strip ALL tags from the description first, then scan the resulting
+  // plain text in document order. This doesn't depend on examples being
+  // wrapped in <pre> (some problems format them as plain <p> text instead),
+  // and doesn't care whether "Output:" happens to be bolded.
+  const plainContent = decodeHtmlEntities(
+    (problem.content ?? "").replace(/<[^>]+>/g, "\n"),
   );
 
-  const allLines = raw
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const numCases = expectedOutputs.length || 1;
-  const linesPerCase = Math.max(1, Math.round(allLines.length / numCases));
+  const expectedOutputs = [
+    ...plainContent.matchAll(/Output:\s*([^\n]+)/gi),
+  ].map((m) => m[1].trim());
 
-  const casesLines: string[][] = [];
-  for (let i = 0; i < allLines.length; i += linesPerCase) {
-    casesLines.push(allLines.slice(i, i + linesPerCase));
-  }
+  // Input: lines, extracted in the same scan so exampleInputsRaw[i] is
+  // reliably the Input belonging to the same Example block as
+  // expectedOutputs[i] (Input always immediately precedes Output within an
+  // example), regardless of how exampleTestcases happens to be ordered.
+  const exampleInputsRaw = [
+    ...plainContent.matchAll(/Input:\s*([^\n]+)/gi),
+  ].map((m) => m[1].trim());
+
+  const numCases = expectedOutputs.length || 1;
+  const casesLines = splitExampleCases(raw, numCases);
 
   if (casesLines.length === 0) {
     return Response.json(
       { error: "No test cases found for this problem" },
       { status: 400 },
+    );
+  }
+
+  if (expectedOutputs.length !== casesLines.length) {
+    console.warn(
+      `[run_code] Mismatch for slug "${slug}": ${expectedOutputs.length} Output label(s) parsed ` +
+        `from description but ${casesLines.length} input case(s) derived from exampleTestcases. ` +
+        `expectedOutputs=${JSON.stringify(expectedOutputs)}`,
+    );
+  }
+
+  // Build a value-based mapping from each raw case (casesLines[i]) to the
+  // description example whose Input matches it, so we pick the right
+  // Output regardless of how the two lists happen to be ordered relative
+  // to each other.
+  const descriptionInputKeys = exampleInputsRaw.map((rawInput) =>
+    comparableInputKey(extractValueTokens(rawInput)),
+  );
+
+  const usedDescriptionIndices = new Set<number>();
+  const matchedExpectedOutputs: (string | undefined)[] = casesLines.map(
+    (caseLines) => {
+      const key = comparableInputKey(caseLines);
+      const matchIdx = descriptionInputKeys.findIndex(
+        (descKey, idx) => descKey === key && !usedDescriptionIndices.has(idx),
+      );
+      if (matchIdx === -1) return undefined;
+      usedDescriptionIndices.add(matchIdx);
+      return expectedOutputs[matchIdx];
+    },
+  );
+
+  const unmatchedCount = matchedExpectedOutputs.filter(
+    (v) => v === undefined,
+  ).length;
+  if (unmatchedCount > 0) {
+    console.warn(
+      `[run_code] For slug "${slug}": couldn't value-match ${unmatchedCount} case(s) to a ` +
+        `description example by input content; falling back to positional pairing for those. ` +
+        `casesLines=${JSON.stringify(casesLines)} exampleInputsRaw=${JSON.stringify(exampleInputsRaw)}`,
     );
   }
 
@@ -494,7 +675,10 @@ export async function POST(req: Request) {
   for (let i = 0; i < casesLines.length; i++) {
     const inputLines = casesLines[i];
     const inputDisplay = inputLines.join(" ");
-    const expected = expectedOutputs[i] ?? "?";
+    // Prefer the value-matched expected output; fall back to positional
+    // pairing (old behavior) only when no description example could be
+    // matched by input content.
+    const expected = matchedExpectedOutputs[i] ?? expectedOutputs[i] ?? "?";
     let actual = "";
     let error = null;
 
@@ -558,11 +742,51 @@ export async function POST(req: Request) {
       console.log(`Case ${i + 1} fetch error:`, error);
     }
 
+    function extractComparableValue(s: string): string {
+      // LeetCode describes in-place-mutation problems (Remove Element,
+      // Remove Duplicates from Sorted Array, etc.) with composite text like
+      // "2, nums = [2,2,_,_]" — the trailing array reflects the mutated
+      // argument plus "don't care" placeholders. This harness only ever
+      // captures the function's return value (the leading scalar), never
+      // the mutated array, so comparing the full composite string against
+      // a bare "2" always fails even for a correct solution. When this
+      // pattern is detected, compare only the leading scalar.
+      const m = s.match(/^(-?\d+)\s*,\s*nums\s*=/i);
+      return m ? m[1] : s;
+    }
+
+    function unwrapQuotedString(s: string): string {
+      const trimmed = s.trim();
+      if (
+        (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+        (trimmed.startsWith("'") && trimmed.endsWith("'"))
+      ) {
+        return trimmed.slice(1, -1);
+      }
+      return trimmed;
+    }
+
+    const passed =
+      !error &&
+      (normalize(extractComparableValue(actual)) ===
+        normalize(extractComparableValue(expected)) ||
+        normalize(unwrapQuotedString(extractComparableValue(actual))) ===
+          normalize(unwrapQuotedString(extractComparableValue(expected))));
+    if (!passed && !error) {
+      console.warn(
+        `[run_code] Case ${i + 1} mismatch despite visual similarity — raw values:\n` +
+          `  expected raw: ${JSON.stringify(expected)}\n` +
+          `  actual raw:   ${JSON.stringify(actual)}\n` +
+          `  expected normalized: ${JSON.stringify(normalize(expected))}\n` +
+          `  actual normalized:   ${JSON.stringify(normalize(actual))}`,
+      );
+    }
+
     results.push({
       input: inputDisplay,
       expected,
       actual,
-      passed: !error && normalize(actual) === normalize(expected),
+      passed,
       error: error ?? null,
     });
   }
