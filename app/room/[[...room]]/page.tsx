@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useSocket } from "@/hooks/useSocket";
 import Editor from "@/components/codeEditor";
+import ChatComponent from "@/components/chatComponent";
+import Leaderboard from "@/components/leaderboard";
 
 interface SessionQuestion {
   slug: string;
@@ -49,7 +51,8 @@ export default function Roompage() {
   const params = useParams();
   const roomArr = params.room as string[];
   const sessionId = roomArr?.[0];
-  const { socket } = useSocket();
+  const router = useRouter();
+  const { socket, isConnected } = useSocket();
 
   const [questions, setQuestions] = useState<SessionQuestion[]>([]);
   const [qIndex, setQIndex] = useState(0);
@@ -58,14 +61,19 @@ export default function Roompage() {
 
   const [runResult, setRunResult] = useState<RunResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
+  const [toast, setToast] = useState<string | null>(null);
   const [username, setUsername] = useState("");
   const [solvedQn, setSolvedQn] = useState<Set<number>>(new Set());
+  const [extra, setExtra] = useState(true); //if true->chat else leaderboard
   useEffect(() => {
     const stored = sessionStorage.getItem("username");
     if (stored) setUsername(stored);
   }, []);
 
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
   //if the user submits correctly
   useEffect(() => {
     if (runResult?.passed) {
@@ -78,8 +86,12 @@ export default function Roompage() {
         next.add(qIndex);
         return next;
       });
-
+      const content =
+        username + " finished " + "question:  " + (Number(qIndex) + 1);
       // -> Send a notification at chat that user solved qn number---------------- TODO
+      socket.emit("send_message", { sessionId, username: "server", content });
+      showToast(`${username} Solved Question: ${qIndex + 1}`);
+
       // -> update LEADERBOARD
       //
     }
@@ -88,13 +100,18 @@ export default function Roompage() {
   // Socket: join room + get questions
   useEffect(() => {
     const handleQuestions = (q: SessionQuestion[]) => setQuestions(q);
+    const handleSessionEnded = () => {
+      router.push("/dashboard");
+    };
     socket.on("questions_list", handleQuestions);
+    socket.on("session_ended", handleSessionEnded);
     socket.emit("join_room", { sessionId });
     socket.emit("get_questions", { sessionId });
     return () => {
       socket.off("questions_list", handleQuestions);
+      socket.off("session_ended", handleSessionEnded);
     };
-  }, [sessionId]);
+  }, [isConnected, sessionId]);
 
   // Fetch problem when slug changes
   const currentSlug = questions[qIndex]?.slug ?? null;
@@ -136,7 +153,9 @@ export default function Roompage() {
       : d === "Medium"
         ? "text-yellow-400"
         : "text-red-400";
-
+  const endSession = () => {
+    socket.emit("end_session", { sessionId });
+  };
   return (
     <div className="flex h-screen overflow-hidden ">
       <div className="w-[40%] flex flex-col border-r border-zinc-800">
@@ -197,19 +216,54 @@ export default function Roompage() {
         </div>
 
         {/* Chat */}
-        <div className="h-36 border-t border-zinc-800 px-3 py-2 text-xs text-zinc-600">
-          CHAT / LEADERBOARD
+        <div className=" flex flex-1 border-t border-zinc-800 px-3 py-2  overflow-auto text-xs text-zinc-600">
+          <div>
+            <button
+              onClick={() => setExtra((prev) => !prev)}
+              className="bg-gray-200 hover:bg-gray-300"
+            >
+              Shift
+            </button>
+          </div>
+
+          {extra ? (
+            <div className="flex-1 border-b border-black">
+              <ChatComponent
+                socket={socket}
+                sessionId={sessionId}
+                username={username}
+              />
+            </div>
+          ) : (
+            <div className="  flex-1 border-b  border-black p-2">
+              <Leaderboard
+                socket={socket}
+                sessionId={sessionId}
+                username={username}
+                totalQuestions={questions.length}
+              />
+            </div>
+          )}
         </div>
       </div>
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Editor
-          questions={questions}
-          currentSlug={currentSlug}
-          problem={problem}
-          submitting={submitting}
-          onSubmit={handleSubmit}
-        />
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {" "}
+          {toast && (
+            <div className="fixed bottom-6 right-6 bg-gray-900 text-white text-sm px-4 py-2 rounded-lg shadow-lg z-50">
+              {toast}
+            </div>
+          )}
+          <Editor
+            questions={questions}
+            currentSlug={currentSlug}
+            problem={problem}
+            submitting={submitting}
+            onSubmit={handleSubmit}
+            endSession={endSession}
+          />
+        </div>
         {runResult && (
           <div className="border-t border-zinc-800 bg-zinc-900 px-3 py-2 max-h-56 overflow-y-auto">
             <div className="flex items-center gap-2 mb-2">
