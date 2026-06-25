@@ -1,11 +1,8 @@
 const { Server } = require("socket.io");
 
-const PORT = 3001;
-const FRONTEND_URL = "http://localhost:3000";
-
-const io = new Server(PORT, {
+const io = new Server(10000, {
   cors: {
-    origin: [FRONTEND_URL, "http://localhost:3000"],
+    origin: "http://localhost:3000",
   },
 });
 
@@ -58,7 +55,7 @@ async function saveSessionArchive(sessionId, session) {
       participants: getParticipantArchiveRows(session),
     };
 
-    const response = await fetch(`${FRONTEND_URL}/api/session-archive`, {
+    const response = await fetch("http://localhost:3000/api/session-archive", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -225,4 +222,4 @@ io.on("connection", (socket) => {
   });
 });
 
-console.log(`WebSocket server running on port ${PORT}`);
+console.log("WebSocket server running on port 10000");
