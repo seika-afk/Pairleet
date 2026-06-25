@@ -65,6 +65,51 @@ export default function AsciiHero() {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
+    function trimTransparentPadding(src: HTMLCanvasElement): HTMLCanvasElement {
+      const sctx = src.getContext("2d")!;
+      const { data, width, height } = sctx.getImageData(0, 0, src.width, src.height);
+
+      let minX = width, minY = height, maxX = 0, maxY = 0;
+      let found = false;
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = (y * width + x) * 4;
+          const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
+          const brightness = ((r * 0.299 + g * 0.587 + b * 0.114) / 255) * (a / 255);
+          const isContent = a > 10 && brightness < 0.95; // not transparent and not near-white
+          if (isContent) {
+            found = true;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+
+      if (!found) return src; // nothing detected, fall back to original
+
+      const padding = 2;
+      minX = Math.max(0, minX - padding);
+      minY = Math.max(0, minY - padding);
+      maxX = Math.min(width - 1, maxX + padding);
+      maxY = Math.min(height - 1, maxY + padding);
+
+      const trimmedW = maxX - minX + 1;
+      const trimmedH = maxY - minY + 1;
+
+      const trimmed = document.createElement("canvas");
+      trimmed.width = trimmedW;
+      trimmed.height = trimmedH;
+      trimmed.getContext("2d")!.drawImage(
+        src,
+        minX, minY, trimmedW, trimmedH,
+        0, 0, trimmedW, trimmedH,
+      );
+      return trimmed;
+    }
+
     function buildSourceCanvas(): HTMLCanvasElement {
       const { W: canvasW, H: canvasH } = getParentSize();
 
@@ -88,6 +133,7 @@ export default function AsciiHero() {
 
       if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
         oc.drawImage(logoImg, 0, 0, W, H);
+        return trimTransparentPadding(off);
       } else {
         oc.fillStyle = "#000";
         const fontSize = Math.floor(H * 0.72);
@@ -265,6 +311,16 @@ export default function AsciiHero() {
     canvas.addEventListener("mouseleave", onMouseLeave);
     window.addEventListener("resize", onResize);
 
+    const logoImgEl = document.getElementById(
+      "ascii-logo-source",
+    ) as HTMLImageElement | null;
+    const onLogoLoad = () => {
+      sampleLogoIntoCells();
+    };
+    if (logoImgEl && !logoImgEl.complete) {
+      logoImgEl.addEventListener("load", onLogoLoad);
+    }
+
     requestAnimationFrame(init);
 
     return () => {
@@ -272,6 +328,7 @@ export default function AsciiHero() {
       canvas.removeEventListener("mousemove", onMouseMove);
       canvas.removeEventListener("mouseleave", onMouseLeave);
       window.removeEventListener("resize", onResize);
+      if (logoImgEl) logoImgEl.removeEventListener("load", onLogoLoad);
     };
   }, []);
 
