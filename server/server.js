@@ -1,10 +1,9 @@
 const { Server } = require("socket.io");
 
-const io = new Server(10000, {
-  cors: {
-    origin: "http://localhost:3000",
-  },
-});
+cors: {
+  origin: "https://pairleet.vercel.app",
+  methods: ["GET", "POST"],
+},
 
 const sessions = new Map();
 //session_id: {,participant: {socketid,Array<participants'name>}}
