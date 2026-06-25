@@ -2,18 +2,15 @@
 import { useEffect, useState, useRef } from "react";
 import { EVENTS } from "@/websocket/events";
 import { msg_ } from "@/websocket/listeners";
-
 type Props = {
   socket: any;
   sessionId: string;
   username: string;
 };
-
 export default function ChatComponent({ socket, sessionId, username }: Props) {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<msg_[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     if (!socket) return;
     const handler = (msg: msg_) => {
@@ -24,28 +21,21 @@ export default function ChatComponent({ socket, sessionId, username }: Props) {
       socket.off(EVENTS.RECEIVE_MESSAGE, handler);
     };
   }, [socket]);
-
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
   const sendMessage = () => {
     if (!message.trim()) return;
     socket.emit(EVENTS.SEND_MESSAGE, { sessionId, username, content: message });
     setMessage("");
   };
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") sendMessage();
   };
-
   return (
-    <div className="flex flex-col gap-3" style={{ height: "100%" }}>
+    <div className="flex flex-col h-full gap-3">
       {/* Message list */}
-      <div
-        className="overflow-y-auto flex flex-col gap-1.5 pr-1"
-        style={{ height: "100%", maxHeight: "220px" }}
-      >
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1.5 pr-1">
         {messages.length === 0 && (
           <p className="text-white/20 text-xs font-mono text-center py-6">
             No messages yet
@@ -80,7 +70,6 @@ export default function ChatComponent({ socket, sessionId, username }: Props) {
         })}
         <div ref={bottomRef} />
       </div>
-
       {/* Input row */}
       <div className="flex items-center gap-2 shrink-0">
         <input

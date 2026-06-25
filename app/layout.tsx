@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Pairleet",
   description: "Pair up your leetcode",
+  icons: {
+    icon: "/logoo.png",
+  },
 };
 
 export default function RootLayout({

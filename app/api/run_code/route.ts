@@ -400,8 +400,8 @@ function buildRustScript(userCode: string, inputLines: string[]): string {
 
   if (!match && !isStaticFn) return userCode;
 
-  const method = match ? match[1] : isStaticFn![1];
-  const paramStr = match ? match[2] : isStaticFn![2];
+  const method = match ? match[1] : (isStaticFn as RegExpMatchArray)[1];
+  const paramStr = match ? match[2] : (isStaticFn as RegExpMatchArray)[2];
   const params = paramStr
     .split(",")
     .map((p) => p.trim())
