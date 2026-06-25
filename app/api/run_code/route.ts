@@ -1,7 +1,6 @@
 import { LeetCode } from "leetcode-query";
 
 const lc = new LeetCode();
-
 const COMPILER_MAP: Record<string, string> = {
   python: "python-3.14",
   javascript: "typescript-deno",
