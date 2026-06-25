@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 interface LeaderboardEntry {
   username: string;
@@ -11,6 +11,7 @@ interface LeaderboardProps {
   username: string;
   totalQuestions: number;
 }
+
 export default function Leaderboard({
   socket,
   sessionId,
@@ -18,80 +19,68 @@ export default function Leaderboard({
   totalQuestions,
 }: LeaderboardProps) {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
-  const [toast, setToast] = useState<string | null>(null);
-  const announcedWinners = useRef<Set<string>>(new Set());
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
-  };
 
   useEffect(() => {
-    const handleUpdate = (data: LeaderboardEntry[]) => {
-      if (totalQuestions > 0) {
-        data.forEach((entry) => {
-          const hasFinished = entry.solved >= totalQuestions;
-          if (hasFinished && !announcedWinners.current.has(entry.username)) {
-            announcedWinners.current.add(entry.username);
-            showToast(
-              entry.username === username
-                ? "You finished all questions! 🏆"
-                : `${entry.username} finished all questions! 🏆`,
-            );
-          }
-        });
-      }
-      setEntries(data);
-    };
-    socket.on("leaderboard_update", handleUpdate);
+    const handler = (data: LeaderboardEntry[]) => setEntries(data);
+    socket.on("leaderboard_update", handler);
     socket.emit("get_leaderboard", { sessionId });
     return () => {
-      socket.off("leaderboard_update", handleUpdate);
+      socket.off("leaderboard_update", handler);
     };
-  }, [socket, sessionId, totalQuestions, username]);
+  }, [socket, sessionId]);
 
   return (
-    <div className="relative">
-      <h3 className="font-semibold mb-2 text-zinc-300">Leaderboard</h3>
-      <div className="flex flex-col gap-1">
-        {entries.length === 0 && (
-          <p className="text-zinc-500">No participants yet.</p>
-        )}
-        {entries.map((entry, i) => {
-          const isMe = entry.username === username;
-          const isWinner = totalQuestions > 0 && entry.solved >= totalQuestions;
-          return (
+    <div className="flex flex-col gap-1.5 h-full overflow-y-auto">
+      {entries.length === 0 && (
+        <p className="text-white/15 font-mono text-xs text-center py-6">
+          No participants yet.
+        </p>
+      )}
+      {entries.map((entry, i) => {
+        const isMe = entry.username === username;
+        const isWinner = totalQuestions > 0 && entry.solved >= totalQuestions;
+        const pct =
+          totalQuestions > 0
+            ? Math.round((entry.solved / totalQuestions) * 100)
+            : 0;
+        return (
+          <div
+            key={entry.username}
+            className={`relative px-3 py-2.5 rounded-xl border overflow-hidden transition-colors ${
+              isWinner
+                ? "bg-amber-400/8 border-amber-400/20"
+                : isMe
+                  ? "bg-[#B7ADCF]/8 border-[#B7ADCF]/15"
+                  : "bg-[#1a1a1b] border-white/5"
+            }`}
+          >
+            {/* progress bar bg */}
             <div
-              key={entry.username}
-              className={`flex items-center justify-between px-2 py-1 rounded ${
-                isMe ? "" : ""
-              } ${isWinner ? "bg-yellow-900/30 border border-yellow-600" : ""}`}
-            >
-              <span className="flex items-center gap-2">
-                <span className="text-zinc-500 w-4">{i + 1}</span>
-                {isWinner && (
-                  <span className="text-[10px] font-bold tracking-[0.2em] text-yellow-300">
-                    WINNER
-                  </span>
-                )}
-                <span className={isMe ? "text-blue-300" : "text-zinc-300"}>
-                  {entry.username}
-                </span>
+              className={`absolute inset-0 opacity-10 transition-all duration-500 ${isWinner ? "bg-amber-400" : isMe ? "bg-[#B7ADCF]" : "bg-white"}`}
+              style={{ width: `${pct}%` }}
+            />
+            <div className="relative flex items-center gap-2.5">
+              <span className="text-white/20 font-mono text-[10px] w-4 shrink-0">
+                {i + 1}
               </span>
-              <span className="text-zinc-400">
+              {isWinner && (
+                <span className="text-[9px] font-mono tracking-widest text-amber-400 shrink-0">
+                  WINNER
+                </span>
+              )}
+              <span
+                className={`font-mono text-sm truncate ${isMe ? "text-[#B7ADCF]" : "text-white/65"}`}
+              >
+                {entry.username}
+              </span>
+              <span className="ml-auto text-white/25 font-mono text-xs shrink-0">
                 {entry.solved}
-                {totalQuestions > 0 ? ` / ${totalQuestions}` : ""} solved
+                {totalQuestions > 0 ? `/${totalQuestions}` : ""} solved
               </span>
             </div>
-          );
-        })}
-      </div>
-
-      {toast && (
-        <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 rounded-lg bg-gray-900 px-4 py-2 text-sm text-white shadow-lg">
-          {toast}
-        </div>
-      )}
+          </div>
+        );
+      })}
     </div>
   );
 }

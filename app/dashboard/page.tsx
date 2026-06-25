@@ -4,10 +4,12 @@ import DashboardClient from "./dashboardClient";
 
 export default async function DashboardPage() {
   const { userId } = await auth();
-
   if (!userId) {
     redirect("/sign-in");
   }
-
-  return <DashboardClient userId={userId} />;
+  return (
+    <div>
+      <DashboardClient userId={userId} />
+    </div>
+  );
 }

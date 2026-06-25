@@ -4,7 +4,7 @@ const lc = new LeetCode();
 
 const COMPILER_MAP: Record<string, string> = {
   python: "python-3.14",
-  javascript: "typescript-deno", // no plain Node.js compiler listed; Deno runs JS fine
+  javascript: "typescript-deno",
   cpp: "g++-15",
   c: "gcc-15",
   go: "go-1.26",
@@ -106,19 +106,8 @@ def _from_tree(root):
 
   const importLine = `import ast, json${usesOptional || usesList ? ", typing" : ""}\n${usesOptional ? "from typing import Optional, List\n" : usesList ? "from typing import List\n" : ""}`;
 
-  // Build arg conversion: wrap list args in _to_linked_list/_to_tree if the param type suggests it
-  // Simple heuristic: first param is the data structure if ListNode/TreeNode is used
   const argsRaw = `_raw_args = [ast.literal_eval(x) for x in ${JSON.stringify(inputLines)}]`;
 
-  // IMPORTANT: don't assume only the FIRST argument is the linked
-  // list/tree. Problems like "Add Two Numbers" or "Merge Two Sorted
-  // Lists" take TWO ListNode params; problems like "Remove Nth Node
-  // From End of List" take a ListNode plus a trailing scalar (k).
-  // Converting only _raw_args[0] silently leaves later list-shaped
-  // args as plain Python lists (no .val/.next), breaking the solution
-  // or producing a result that fails comparison. Instead, convert every
-  // arg that is itself a list (the data-structure params) and leave
-  // scalar args (ints like k/target/n) untouched.
   let argConversion = "_args = _raw_args";
   if (usesListNode) {
     argConversion = `_args = [_to_linked_list(a) if isinstance(a, list) else a for a in _raw_args]`;
@@ -128,10 +117,6 @@ def _from_tree(root):
 
   let outputConversion = "json.dumps(_result)";
   if (usesListNode) {
-    // _result is Optional[ListNode] — None is a *valid* empty-list head,
-    // not a signal to skip conversion. _from_linked_list already returns
-    // [] for None safely, so always convert rather than special-casing None
-    // as if it were a plain already-JSON-able value.
     outputConversion = "json.dumps(_from_linked_list(_result))";
   } else if (usesTreeNode) {
     outputConversion = "json.dumps(_from_tree(_result))";
@@ -148,24 +133,15 @@ print(${outputConversion})
 }
 
 // ── JavaScript ───────────────────────────────────────────────────────────────
-// LeetCode JS starter code is a plain function, NOT a class:
-//   var reverse = function(x) { ... };
 function parseJSSignature(
   code: string,
 ): { method: string; isClassMethod: boolean } | null {
-  // Class-based Solution (e.g. permute, backtracking-style problems) —
-  // check this FIRST. Otherwise the plain-function regexes below can match
-  // an inner helper (e.g. `const backtrack = (path) => {...}` declared
-  // inside a method body) instead of the real entry point, and the
-  // generated script calls a function that's out of scope -> runtime error.
   if (/class\s+Solution\b/.test(code)) {
     const classBodyMatch = code.match(
       /class\s+Solution\b[^{]*\{([\s\S]*)\}\s*$/,
     );
     const body = classBodyMatch ? classBodyMatch[1] : code;
-    // Only match method definitions that start at the beginning of a line
-    // (i.e. declared directly in the class body), not nested
-    // const/let/function declarations inside another method's body.
+
     const methodMatches = [
       ...body.matchAll(/^[ \t]*(\w+)\s*\(([^)]*)\)\s*\{/gm),
     ];
@@ -199,16 +175,11 @@ function buildJSScript(userCode: string, inputLines: string[]): string {
     return `${userCode}\n\nconst _result = ${sig.method}(${argList});\nconsole.log(JSON.stringify(_result));\n`;
   }
 
-  // Fallback: class-based Solution where the method couldn't be isolated
-  // any other way (e.g. unusual formatting) — grab the first non-constructor
-  // method off the prototype at runtime instead.
   return `${userCode}\n\nconst _sol = new Solution();\nconst _method = Object.getOwnPropertyNames(Solution.prototype).find(m => m !== 'constructor');\nconst _result = _sol[_method](${argList});\nconsole.log(JSON.stringify(_result));\n`;
 }
 
 // ── C ────────────────────────────────────────────────────────────────────────
-// LeetCode C starter code is a plain function (no class), e.g.:
-//   int reverse(int x) { ... }
-//   int* twoSum(int* nums, int numsSize, int target, int* returnSize) { ... }
+
 function parseCSignature(
   code: string,
 ): { method: string; params: { type: string; name: string }[] } | null {
@@ -233,9 +204,6 @@ function buildCScript(userCode: string, inputLines: string[]): string {
   const sig = parseCSignature(userCode);
   if (!sig) return userCode;
 
-  // C LeetCode signatures often include extra params like numsSize/returnSize
-  // that aren't part of the actual input — handle the common simple case:
-  // single scalar param (int x) -> direct call
   const realParams = sig.params.filter((p) => !/size|len|count/i.test(p.name));
 
   const argList = realParams
@@ -427,7 +395,6 @@ func main() {
 
 // ── Rust ─────────────────────────────────────────────────────────────────────
 function buildRustScript(userCode: string, inputLines: string[]): string {
-  // LeetCode Rust is: impl Solution { pub fn method(&self, ...) -> T { ... } }
   const match = userCode.match(/pub fn\s+(\w+)\s*\(\s*&self\s*,?([^)]*)\)/);
   const isStaticFn = !match && userCode.match(/pub fn\s+(\w+)\s*\(([^)]*)\)/);
 
@@ -478,27 +445,6 @@ fn main() {
 `;
 }
 
-// ── Matching raw test cases to the right description example ───────────────
-// `problem.exampleTestcases` (used to build `casesLines`, the actual runtime
-// inputs) and the `Example N: ... Output: ...` blocks in `problem.content`
-// (used to build `expectedOutputs`) are two INDEPENDENT fields returned by
-// LeetCode. They are not guaranteed to list cases in the same order as each
-// other — exampleTestcases is just a flat blob of inputs for the "Run Code"
-// button, while the description's Example blocks can be ordered differently.
-//
-// Previously we zipped casesLines[i] with expectedOutputs[i] purely by
-// array index, which silently pairs the wrong input with the wrong expected
-// output whenever the two orderings diverge (e.g. Count and Say: raw cases
-// are [1, 4] but the description's Output: values end up associated with
-// the opposite case).
-//
-// Fix: extract each Example's Input together with its Output (so within a
-// single example they're reliably paired with each other), then match each
-// raw input case to the description example whose *input values* actually
-// match it. Only fall back to positional pairing if no value-match exists.
-
-// Splits "nums = [2,7,11,15], target = 9" into ["[2,7,11,15]", "9"],
-// respecting bracket/paren depth so commas inside arrays aren't split on.
 function extractValueTokens(input: string): string[] {
   const tokens: string[] = [];
   let depth = 0;
@@ -524,7 +470,6 @@ function comparableInputKey(tokens: string[]): string {
   return normalize(tokens.join(","));
 }
 
-// ── Main handler ─────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
   const { code, language, slug } = await req.json();
 
@@ -599,10 +544,6 @@ export async function POST(req: Request) {
     return cases;
   }
 
-  // Strip ALL tags from the description first, then scan the resulting
-  // plain text in document order. This doesn't depend on examples being
-  // wrapped in <pre> (some problems format them as plain <p> text instead),
-  // and doesn't care whether "Output:" happens to be bolded.
   const plainContent = decodeHtmlEntities(
     (problem.content ?? "").replace(/<[^>]+>/g, "\n"),
   );
@@ -611,10 +552,6 @@ export async function POST(req: Request) {
     ...plainContent.matchAll(/Output:\s*([^\n]+)/gi),
   ].map((m) => m[1].trim());
 
-  // Input: lines, extracted in the same scan so exampleInputsRaw[i] is
-  // reliably the Input belonging to the same Example block as
-  // expectedOutputs[i] (Input always immediately precedes Output within an
-  // example), regardless of how exampleTestcases happens to be ordered.
   const exampleInputsRaw = [
     ...plainContent.matchAll(/Input:\s*([^\n]+)/gi),
   ].map((m) => m[1].trim());
@@ -637,10 +574,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // Build a value-based mapping from each raw case (casesLines[i]) to the
-  // description example whose Input matches it, so we pick the right
-  // Output regardless of how the two lists happen to be ordered relative
-  // to each other.
   const descriptionInputKeys = exampleInputsRaw.map((rawInput) =>
     comparableInputKey(extractValueTokens(rawInput)),
   );
@@ -675,9 +608,7 @@ export async function POST(req: Request) {
   for (let i = 0; i < casesLines.length; i++) {
     const inputLines = casesLines[i];
     const inputDisplay = inputLines.join(" ");
-    // Prefer the value-matched expected output; fall back to positional
-    // pairing (old behavior) only when no description example could be
-    // matched by input content.
+
     const expected = matchedExpectedOutputs[i] ?? expectedOutputs[i] ?? "?";
     let actual = "";
     let error = null;
@@ -743,14 +674,6 @@ export async function POST(req: Request) {
     }
 
     function extractComparableValue(s: string): string {
-      // LeetCode describes in-place-mutation problems (Remove Element,
-      // Remove Duplicates from Sorted Array, etc.) with composite text like
-      // "2, nums = [2,2,_,_]" — the trailing array reflects the mutated
-      // argument plus "don't care" placeholders. This harness only ever
-      // captures the function's return value (the leading scalar), never
-      // the mutated array, so comparing the full composite string against
-      // a bare "2" always fails even for a correct solution. When this
-      // pattern is detected, compare only the leading scalar.
       const m = s.match(/^(-?\d+)\s*,\s*nums\s*=/i);
       return m ? m[1] : s;
     }

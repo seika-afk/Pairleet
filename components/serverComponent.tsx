@@ -17,36 +17,26 @@ export default function Lobby({
 }: LobbyProps) {
   return (
     <div>
-      <div>
+      <div className="flex gap-2 flex-col">
         {" "}
-        <h1>Create Server</h1>
         <input
           value={sessionId}
           onChange={(e) => setSessionId(e.target.value)}
-          placeholder="Enter Session ID"
+          placeholder="Session ID"
+          className="border-2  border-zinc-400 rounded-xl p-2 focus:outline-none focus:bg-neutral-600"
         />
         <input
           value={username}
           onChange={(e) => setUsername(e.target.value)}
-          placeholder="Enter Username"
+          placeholder="Username"
+          className="border-2 border-zinc-400 rounded-xl p-2  focus:border-none focus:outline-none focus:bg-neutral-600"
         />
-        <button onClick={joinSession}>Create</button>
-      </div>
-      <div>
-        {" "}
-        <h1>Join Server</h1>
-        <input
-          value={sessionId}
-          onChange={(e) => setSessionId(e.target.value)}
-          placeholder="Enter Session ID"
-        />
-        <input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="Enter Username"
-          onKeyDown={(e) => e.key == "Enter" && joinSession}
-        />
-        <button onClick={joinSession}>Create</button>
+        <button
+          className=" hover:bg-neutral-600  font-bold rounded-2xl duration-200 transition cursor-pointer p-2"
+          onClick={joinSession}
+        >
+          Start
+        </button>
       </div>
     </div>
   );
