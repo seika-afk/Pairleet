@@ -40,7 +40,6 @@ export default function AsciiHero() {
     let mouse = { col: -999, row: -999, isMoving: false };
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
     let rafId = 0;
-    let scrambleId: ReturnType<typeof setInterval>;
     let started = false;
 
     function getParentSize() {
@@ -270,7 +269,6 @@ export default function AsciiHero() {
 
     return () => {
       cancelAnimationFrame(rafId);
-      clearInterval(scrambleId);
       canvas.removeEventListener("mousemove", onMouseMove);
       canvas.removeEventListener("mouseleave", onMouseLeave);
       window.removeEventListener("resize", onResize);
