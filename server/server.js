@@ -1,10 +1,14 @@
-/* eslint-disable @typescript-eslint/no-require-imports */
 const { Server } = require("socket.io");
-const io = new Server(3001, {
+
+const PORT = 3001;
+const FRONTEND_URL = "http://localhost:3000";
+
+const io = new Server(PORT, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: [FRONTEND_URL, "http://localhost:3000"],
   },
 });
+
 const sessions = new Map();
 //session_id: {,participant: {socketid,Array<participants'name>}}
 
@@ -30,9 +34,8 @@ function getParticipantArchiveRows(session) {
 
 function getQuestionArchiveRows(session) {
   return session.questions.map((question, index) => {
-    const solvers = session.participants.filter(
-      (participant) =>
-        session.questions_solved[participant.username]?.has(index),
+    const solvers = session.participants.filter((participant) =>
+      session.questions_solved[participant.username]?.has(index),
     );
 
     return {
@@ -55,7 +58,7 @@ async function saveSessionArchive(sessionId, session) {
       participants: getParticipantArchiveRows(session),
     };
 
-    const response = await fetch("http://localhost:3000/api/session-archive", {
+    const response = await fetch(`${FRONTEND_URL}/api/session-archive`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -221,4 +224,5 @@ io.on("connection", (socket) => {
     console.log(`User disconnected: ${socket.id}`);
   });
 });
-console.log("WebSocket server running on port 3001");
+
+console.log(`WebSocket server running on port ${PORT}`);
